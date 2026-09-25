@@ -101,13 +101,14 @@ app.use('/new', express.static(path.join(__dirname, 'public/new')));
 app.get('/new/*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/new/index.html'));
 });
-// 为所有路由添加认证（除了登录页和登录接口）
+// 为所有路由添加认证（白名单：登录页、静态资源、/new 现代前端、/emby 媒体服务API由自身鉴权管理）
 app.use((req, res, next) => {
     if (req.path === '/' || req.path === '/login' 
-        || req.path === '/api/auth/login' 
+        || req.path.startsWith('/new')
+        || req.path.startsWith('/emby')
         || req.path === '/api/auth/login' 
         || req.path === '/emby/notify'
-        || req.path.match(/\.(css|js|png|jpg|jpeg|gif|ico)$/)) {
+        || req.path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf)$/)) {
         return next();
     }
     authenticateSession(req, res, next);

@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node dist/index.js",
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('fs'); fs.cpSync('src/public', 'dist/public', {recursive:true});\"",
     "dev": "ts-node src/index.js"
   },
   "dependencies": {
@@ -17,13 +17,16 @@
     "got": "11.8.2",
     "http-proxy-agent": "^7.0.2",
     "https-proxy-agent": "^7.0.6",
+    "iconv-lite": "^0.7.3",
+    "json-bigint": "^1.0.0",
     "node-cron": "^3.0.2",
     "node-telegram-bot-api": "^0.66.0",
     "reflect-metadata": "^0.1.13",
     "session-file-store": "^1.5.0",
     "sqlite3": "^5.1.6",
     "typeorm": "^0.3.17",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
