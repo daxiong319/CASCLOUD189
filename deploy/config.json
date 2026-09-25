@@ -1,0 +1,22 @@
+{
+  "emby": {
+    "enable": false,
+    "serverUrl": "",
+    "apiKey": ""
+  },
+  "system": {
+    "username": "admin",
+    "password": "admin",
+    "baseUrl": "",
+    "apiKey": ""
+  },
+  "telegram": {
+    "enable": false,
+    "proxyDomain": "",
+    "searchChannels": [
+      "tianyirigeng",
+      "cloudtianyi",
+      "tyypzhpd"
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+server:
+  port: 8090
+
+tmdb:
+  api_key: "f6bd687ffa63cd282b6ff2c6877f2669"  # Set via TMDB_API_KEY environment variable
+  language: "zh-CN"
+  base_url: "https://api.tmdb.org/3"
+
+naming_template:
+  movie: "{{title}} ({{year}})/{{title}} ({{year}}) - {{resolution}}.{{videoCodec}}.{{audioCodec}}{{ext}}"
+  tv_show_dir: "{{title}} ({{year}})"
+  tv_season_dir: "Season {{seasonPad}}"
+  tv_file: "{{title}} - S{{seasonPad}}E{{episodePad}} - {{resolution}}.{{videoCodec}}.{{audioCodec}}{{ext}}"
+  enable_category: true
+
+category:
+  enabled: true
+  config_path: "category.yaml"
