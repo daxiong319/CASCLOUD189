@@ -1,7 +1,7 @@
 {
   "name": "cloud189-sdk-pro",
   "version": "1.0.0",
-  "description": "基于node.js的第三方天翼云盘SDK",
+  "description": "\u57fa\u4e8enode.js\u7684\u7b2c\u4e09\u65b9\u5929\u7ffc\u4e91\u76d8SDK",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
@@ -24,7 +24,7 @@
     "url": "git+https://github.com/wes-lin/cloud189-sdk.git"
   },
   "keywords": [
-    "天翼网盘sdk"
+    "\u5929\u7ffc\u7f51\u76d8sdk"
   ],
   "license": "MIT",
   "dependencies": {
@@ -49,6 +49,5 @@
     "sinon": "^20.0.0",
     "ts-node": "^10.9.2",
     "typescript": "4.9.5"
-  },
-  "packageManager": "pnpm@7.33.6"
+  }
 }

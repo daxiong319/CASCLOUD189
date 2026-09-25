@@ -9,11 +9,12 @@ RUN apk add --no-cache python3 make g++ git
 COPY package*.json yarn.lock tsconfig.json ./
 COPY vender/ ./vender/
 
-# 编译 SDK 与前端/后端
+# SDK 已包含预编译的 dist/，仅安装运行时依赖
 RUN if [ -d "vender/cloud189-sdk" ]; then \
-        cd vender/cloud189-sdk && yarn install && yarn build && cd ../.. ; \
+        cd vender/cloud189-sdk && yarn install --production && cd ../.. ; \
     fi
 
+# 安装项目依赖
 RUN yarn install
 
 COPY . .
