@@ -326,11 +326,23 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* 分节标题 */
 .sec-title { font-size: 15px; font-weight: 600; margin: 4px 0 14px; display: flex; align-items: center; gap: 8px; }
 
+/* 移动端汉堡菜单按钮（基础规则，默认隐藏） */
+.menu-btn { display: none; align-items: center; justify-content: center; width: 34px; height: 34px; background: none; border: 1px solid var(--c-border); border-radius: var(--radius-sm); color: var(--t-sub); font-size: 16px; cursor: pointer; flex-shrink: 0; }
+.menu-btn:hover { color: var(--t-main); border-color: var(--t-dim); }
+
 /* 响应式 */
 @media (max-width: 860px) {
     .sidebar { position: fixed; z-index: 900; height: 100%; transform: translateX(-100%); transition: transform .2s; }
     .sidebar.open { transform: none; box-shadow: 0 0 60px rgba(0,0,0,.6); }
-    .menu-btn { display: inline-flex !important; }
+    .menu-btn { display: inline-flex; }
     .content { padding: 12px; }
 }
-.menu-btn { display: none !important; align-items: center; justify-content: center; width: 34px; height: 34px; background: none; border: 1px solid var(--c-border); border-radius: var(--radius-sm); color: var(--t-sub); font-size: 16px; cursor: pointer; }
+
+/* 移动端侧栏遮罩 */
+.sidebar-mask {
+    display: none; position: fixed; inset: 0; z-index: 890;
+    background: rgba(0,0,0,.5); backdrop-filter: blur(2px);
+}
+@media (max-width: 860px) {
+    .sidebar-mask.show { display: block; }
+}

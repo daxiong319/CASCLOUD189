@@ -72,6 +72,7 @@ const App = {
         ];
         document.getElementById('app').innerHTML = `
         <div class="layout">
+            <div class="sidebar-mask" id="sidebarMask" onclick="App.closeSidebar()"></div>
             <div class="sidebar" id="sidebar">
                 <div class="sidebar-logo"><span class="logo-ico">🎬</span> CASCLOUD189 <span class="ver">v${esc(this.version)}</span></div>
                 <div class="nav" id="navBox">
@@ -86,7 +87,7 @@ const App = {
             </div>
             <div class="main">
                 <div class="topbar">
-                    <button class="menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+                    <button class="menu-btn" onclick="App.toggleSidebar()">☰</button>
                     <h2 id="pageTitle">仪表盘</h2>
                     <div class="spacer"></div>
                     <button class="btn btn-ghost btn-sm" onclick="App.go('logs')">📜 日志</button>
@@ -102,10 +103,24 @@ const App = {
         this.go('dashboard');
     },
 
+    toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        const mask = document.getElementById('sidebarMask');
+        sb.classList.toggle('open');
+        if (mask) mask.classList.toggle('show', sb.classList.contains('open'));
+    },
+
+    closeSidebar() {
+        const sb = document.getElementById('sidebar');
+        const mask = document.getElementById('sidebarMask');
+        if (sb) sb.classList.remove('open');
+        if (mask) mask.classList.remove('show');
+    },
+
     go(route) {
         this.route = route;
         document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.route === route));
-        document.getElementById('sidebar').classList.remove('open');
+        this.closeSidebar();
         const titles = { dashboard: '仪表盘', tasks: '转存任务', search: '资源搜索', accounts: '账号管理', browser: '网盘浏览', media: '媒体库', cas: 'CAS 实验室', settings: '系统设置', logs: '实时日志' };
         document.getElementById('pageTitle').textContent = titles[route] || route;
         const c = document.getElementById('content');
