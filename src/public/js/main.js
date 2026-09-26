@@ -191,3 +191,130 @@ function toggleHelpText(button) {
         button.textContent = '隐藏帮助';
     }
 }
+
+// ==================== 资源搜索 Tab 联动 (参考 MediaHelp) ====================
+async function doTabResourceSearch() {
+    const kw = document.getElementById('tabResourceInput').value.trim();
+    if (!kw) return alert('请输入搜索关键词');
+
+    const loading = document.getElementById('tabResourceLoading');
+    const container = document.getElementById('tabResourceResults');
+    const tbody = document.getElementById('tabResourceTbody');
+
+    loading.style.display = 'block';
+    container.style.display = 'none';
+
+    try {
+        const res = await fetch(`/api/resource/search?keyword=${encodeURIComponent(kw)}`);
+        const json = await res.json();
+        const list = json.data || [];
+
+        tbody.innerHTML = '';
+        if (list.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#999;">未搜索到相关影视资源，请尝试缩短或更换关键字</td></tr>';
+        } else {
+            list.forEach(item => {
+                const tr = document.createElement('tr');
+                const driveBadge = `<span class="status-badge" style="background:#e8f4ff; color:#0969da; padding:2px 8px; border-radius:4px; font-size:12px;">${item.driveType || '通用'}</span>`;
+                tr.innerHTML = `
+                    <td><strong>${item.title || item.name || '未知标题'}</strong></td>
+                    <td>${driveBadge}</td>
+                    <td><a href="${item.shareUrl || item.url}" target="_blank" style="color:#0969da; word-break:break-all;">${item.shareUrl || item.url}</a></td>
+                    <td style="text-align:center;">
+                        <button type="button" class="btn-primary" style="padding:4px 10px; font-size:12px;" onclick="openCreateTaskWithShare('${item.shareUrl || item.url}', '${item.driveType || 'cloud189'}')">转存入库</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        container.style.display = 'block';
+    } catch (err) {
+        alert('搜索失败: ' + err.message);
+    } finally {
+        loading.style.display = 'none';
+    }
+}
+
+function openCreateTaskWithShare(shareUrl, driveType) {
+    // 切换到任务 Tab 并预填分享链接
+    document.querySelector('.tab[data-tab="task"]').click();
+    openAddTaskModal();
+    const shareInput = document.getElementById('shareUrl');
+    if (shareInput) {
+        shareInput.value = shareUrl;
+        shareInput.dispatchEvent(new Event('input'));
+    }
+}
+
+// ==================== CAS 实验室 Tab 联动 ====================
+async function loadTabCasAccounts() {
+    try {
+        const res = await fetch('/api/accounts');
+        const json = await res.json();
+        const accs = json.data || [];
+        const select = document.getElementById('tabCasAccountSelect');
+        if (select) {
+            select.innerHTML = accs.map(a => `<option value="${a.id}">#${a.id} ${a.alias || a.username} (${a.driveType || 'cloud189'})</option>`).join('');
+        }
+    } catch {}
+}
+
+async function doTabCasRapidUpload() {
+    const accountId = document.getElementById('tabCasAccountSelect').value;
+    const targetFolderId = document.getElementById('tabCasFolderInput').value.trim() || 'root';
+    const casContent = document.getElementById('tabCasContentInput').value.trim();
+    if (!casContent) return alert('请粘贴 CAS 清单或管道符');
+
+    const resBox = document.getElementById('tabCasResultBox');
+    resBox.style.display = 'block';
+    resBox.textContent = '正在通过多网盘秒传协议校验指纹并还原入库...';
+
+    try {
+        const res = await fetch(`/api/drives/account/${accountId}/rapid`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetFolderId, casContent })
+        });
+        const data = await res.json();
+        resBox.textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+        resBox.textContent = '秒传失败: ' + e.message;
+    }
+}
+
+async function doTabCasPlayResolve() {
+    const accountId = document.getElementById('tabCasAccountSelect').value;
+    const casContent = document.getElementById('tabCasContentInput').value.trim();
+    if (!casContent) return alert('请粘贴 CAS 清单或管道符');
+
+    const resBox = document.getElementById('tabCasResultBox');
+    resBox.style.display = 'block';
+    resBox.textContent = '正在通过虚拟 CAS 播放预热解析直链...';
+
+    try {
+        const res = await fetch(`/api/play/${accountId}/info?casContent=${encodeURIComponent(casContent)}`);
+        const data = await res.json();
+        resBox.textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+        resBox.textContent = '直链解析失败: ' + e.message;
+    }
+}
+
+function toggleAccountDriveFields() {
+    const dt = document.getElementById('driveType').value;
+    const pwdGroup = document.getElementById('accountPasswordGroup');
+    const cookieGroup = document.getElementById('accountCookieGroup');
+    if (dt === 'cloud139') {
+        cookieGroup.querySelector('label').textContent = 'Authorization (移动云盘Basic凭据 或 Token)';
+    } else if (dt === 'quark' || dt === 'uc') {
+        cookieGroup.querySelector('label').textContent = 'Cookie (__pus / __puus)';
+    } else if (dt === 'aliyun') {
+        cookieGroup.querySelector('label').textContent = 'Access Token';
+    } else {
+        cookieGroup.querySelector('label').textContent = 'Cookie / 凭据串';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadTabCasAccounts();
+});

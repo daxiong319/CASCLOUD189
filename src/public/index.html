@@ -62,11 +62,13 @@
     </div>
     <div class="container">
         <div class="tabs">
-            <div class="tab" data-tab="account">账号</div>
-            <div class="tab active" data-tab="task">任务</div>
-            <div class="tab" data-tab="media">媒体</div>
-            <div class="tab" data-tab="settings">系统</div>
-            <div class="tab" onclick="window.open('/drives.html', '_self')">网盘驱动</div>
+            <div class="tab" data-tab="account">账号矩阵</div>
+            <div class="tab active" data-tab="task">转存任务</div>
+            <div class="tab" data-tab="resource">资源搜索</div>
+            <div class="tab" data-tab="media">影视媒体</div>
+            <div class="tab" data-tab="cas">CAS 实验室</div>
+            <div class="tab" data-tab="settings">系统设置</div>
+            <div class="tab" onclick="window.open('/drives.html', '_blank')">网盘工作台 ↗</div>
         </div>
 
         <div id="accountTab" class="tab-content">
@@ -88,11 +90,21 @@
                     <form id="accountForm">
                         <div class="form-body">
                             <div class="form-group">
-                                <label for="username">用户名</label>
+                                <label for="driveType">网盘类型</label>
+                                <select id="driveType" style="width:100%; padding:8px;" onchange="toggleAccountDriveFields()">
+                                    <option value="cloud189">天翼云盘</option>
+                                    <option value="cloud139">中国移动云盘 (139)</option>
+                                    <option value="quark">夸克网盘</option>
+                                    <option value="uc">UC 网盘</option>
+                                    <option value="aliyun">阿里云盘</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="accountUsernameGroup">
+                                <label for="username">用户名 / 手机号</label>
                                 <input type="text" id="username" required>
                             </div>
-                            <div class="form-group">
-                                <label for="password">密码</label>
+                            <div class="form-group" id="accountPasswordGroup">
+                                <label for="password">密码 / Token / Authorization</label>
                                 <input type="password" id="password">
                             </div>
                             <!---验证码-->
@@ -103,12 +115,12 @@
                                     <input type="text" id="validateCode" placeholder="验证码">
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label for="cookie">Cookie</label>
-                                <input type="cookie" id="cookie">
+                            <div class="form-group" id="accountCookieGroup">
+                                <label for="cookie">Cookie / 凭据串</label>
+                                <input type="text" id="cookie" placeholder="移动云盘填Basic凭据/Token；夸克UC填Cookie">
                             </div>
                             <div class="form-group">
-                            <small class="form-text">密码和Cookie至少填写一个, 如果都填写, 则只有账号密码生效</small>
+                            <small class="form-text">支持多网盘授权：移动云盘填 Authorization；夸克/UC 填 Cookie；阿里填 Token</small>
                             </div>
                             <div class="form-group">
                                 <label for="alias">别名(可选)</label>
@@ -656,6 +668,68 @@
             </form>
         </div>
     </div>
+
+        <!-- 资源搜索与转存 Tab (参考 MediaHelp 资源探索) -->
+        <div id="resourceTab" class="tab-content">
+            <div class="card" style="margin-bottom:20px; padding:20px;">
+                <h3 style="margin-top:0; margin-bottom:12px;">🔍 影视与网盘资源聚合搜索</h3>
+                <p style="color:#888; font-size:13px; margin-bottom:15px;">支持跨网盘（天翼、移动、夸克、UC、阿里）资源检索，一键解析分享链接并直接创建自动转存与 STRM 扫库任务。</p>
+                <div style="display:flex; gap:10px; max-width:700px;">
+                    <input type="text" id="tabResourceInput" placeholder="输入影视名称、演员或关键字（如：阿凡达、庆余年）..." style="flex:1; padding:10px 14px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+                    <button type="button" class="btn-primary" onclick="doTabResourceSearch()" style="padding:10px 24px; font-size:14px;">一键搜索</button>
+                </div>
+            </div>
+
+            <div id="tabResourceLoading" style="display:none; padding:30px; text-align:center; color:#666;">
+                <span>正在全网聚合检索媒体资源，请稍候...</span>
+            </div>
+
+            <div id="tabResourceResults" style="display:none;">
+                <div class="table-container">
+                    <table class="table-view" style="width:100%;">
+                        <thead>
+                            <tr>
+                                <th style="width:250px;">标题 / 影视名</th>
+                                <th style="width:100px;">网盘类型</th>
+                                <th>分享链接与识别详情</th>
+                                <th style="width:140px; text-align:center;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabResourceTbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- CAS 实验室与快速入库 Tab (参考 MediaHelp / dl302 CAS 核心架构) -->
+        <div id="casTab" class="tab-content">
+            <div class="card" style="margin-bottom:20px; padding:20px;">
+                <h3 style="margin-top:0; margin-bottom:12px;">⚡ CAS 极速秒传入库与虚拟直链解析</h3>
+                <p style="color:#888; font-size:13px; margin-bottom:15px;">
+                    支持任意网盘（天翼/移动/夸克/UC/阿里云盘）基于特征哈希实现零带宽秒传。
+                    支持论坛管道符格式 <code>文件名|大小|MD5|SliceMD5</code>、<code>cloud189://</code> 及 V1/V2 JSON 清单。
+                </p>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div>
+                        <label style="font-size:13px; font-weight:600; display:block; margin-bottom:6px;">目标入库账号</label>
+                        <select id="tabCasAccountSelect" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;"></select>
+                    </div>
+                    <div>
+                        <label style="font-size:13px; font-weight:600; display:block; margin-bottom:6px;">目标目录 ID (留空默认根目录 / root)</label>
+                        <input type="text" id="tabCasFolderInput" placeholder="root 或 目录ID" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+                    </div>
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:13px; font-weight:600; display:block; margin-bottom:6px;">CAS 清单内容 / 管道符</label>
+                    <textarea id="tabCasContentInput" rows="5" placeholder='在此粘贴 CAS 内容，例如：&#10;1. 管道符：电影.mkv|10737418240|E80B5017098950FC58AAD83C8C14978E|5D41402ABC4B2A76B9719D911017C592&#10;2. JSON：{"version":2,"fileName":"电影.mkv","fileSize":10737418240,"hashes":{"md5":"..."}}&#10;3. cloud189://Base64' style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-family:monospace; font-size:13px; box-sizing:border-box;"></textarea>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button type="button" class="btn-primary" onclick="doTabCasRapidUpload()" style="padding:8px 20px;">⚡ 立即秒传入库</button>
+                    <button type="button" class="btn-ghost" onclick="doTabCasPlayResolve()" style="padding:8px 20px;">🎬 测试虚拟 CAS 播放直链</button>
+                </div>
+                <div id="tabCasResultBox" style="display:none; margin-top:15px; padding:12px; background:#f8f9fa; border-radius:6px; font-family:monospace; font-size:13px; white-space:pre-wrap; word-break:break-all;"></div>
+            </div>
+        </div>
 
 <!-- 在 body 结束标签前添加以下脚本引用 -->
 <script src="/js/folderSelector.js"></script>

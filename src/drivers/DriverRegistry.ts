@@ -2,6 +2,7 @@ import { IDriveDriver, DriveType, DriveRegistration } from './types';
 import { Cloud189Driver } from './Cloud189Driver';
 import { QuarkDriver, UcDriver } from './QuarkUcDriver';
 import { AliyunDriver } from './AliyunDriver';
+import { Cloud139Driver } from './Cloud139Driver';
 
 /**
  * 驱动注册中心：
@@ -30,6 +31,16 @@ export class DriverRegistry {
                 { key: 'password', label: '密码 或 Cookie', type: 'password', required: true }
             ]
         }, () => new Cloud189Driver());
+
+        this.register({
+            driveType: 'cloud139',
+            displayName: '中国移动云盘',
+            capabilities: { rapidUpload: true, shareSave: true, directLink: true, familyCloud: true },
+            configFields: [
+                { key: 'authorization', label: 'Authorization (Basic凭据 或 Token)', type: 'textarea', required: true },
+                { key: 'username', label: '手机号 / 账号名（可选）', type: 'text', required: false }
+            ]
+        }, () => new Cloud139Driver());
 
         this.register({
             driveType: 'quark',

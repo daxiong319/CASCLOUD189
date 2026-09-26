@@ -4,7 +4,7 @@
  *  - 供 Telegram Bot 与 REST API 统一调用，按网盘类型分派驱动
  */
 
-export type ShareDriveType = 'cloud189' | 'quark' | 'uc' | 'aliyun' | 'unknown';
+export type ShareDriveType = 'cloud189' | 'quark' | 'uc' | 'aliyun' | 'cloud139' | 'unknown';
 
 export interface ParsedShareLink {
     driveType: ShareDriveType;
@@ -22,7 +22,9 @@ const PATTERNS: { driveType: ShareDriveType; regex: RegExp }[] = [
     // UC: https://drive.uc.cn/s/XXXX
     { driveType: 'uc', regex: /https?:\/\/drive\.uc\.cn\/s\/([A-Za-z0-9_-]+)/i },
     // 阿里: https://www.alipan.com/s/XXXX 或旧版 aliyundrive.com
-    { driveType: 'aliyun', regex: /https?:\/\/(?:www\.)?(?:alipan\.com|aliyundrive\.com)\/s\/([A-Za-z0-9_-]+)/i }
+    { driveType: 'aliyun', regex: /https?:\/\/(?:www\.)?(?:alipan\.com|aliyundrive\.com)\/s\/([A-Za-z0-9_-]+)/i },
+    // 中国移动云盘: https://yun.139.com/w/#/detail/XXXX 或 /s/XXXX
+    { driveType: 'cloud139', regex: /https?:\/\/yun\.139\.com\/(?:w\/#\/detail\/|s\/)([A-Za-z0-9_-]+)/i }
 ];
 
 export class ShareLinkParser {
@@ -54,12 +56,14 @@ export class ShareLinkParser {
 
     /** 各网盘显示名 */
     public static displayName(driveType: ShareDriveType): string {
-        return {
+        const names: Record<ShareDriveType, string> = {
             cloud189: '天翼云盘',
+            cloud139: '中国移动云盘',
             quark: '夸克网盘',
             uc: 'UC 网盘',
             aliyun: '阿里云盘',
             unknown: '未知网盘'
-        }[driveType];
+        };
+        return names[driveType] || '未知网盘';
     }
 }
