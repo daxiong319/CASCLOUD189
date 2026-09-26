@@ -101,10 +101,16 @@ app.use('/new', express.static(path.join(__dirname, 'public/new')));
 app.get('/new/*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/new/index.html'));
 });
-// 为所有路由添加认证（白名单：登录页、静态资源、/new 现代前端、/emby 媒体服务API由自身鉴权管理）
+// ★ 新前端（Symedia 风格 SPA）：/ui
+app.use('/ui', express.static(path.join(__dirname, 'public/new-ui')));
+app.get('/ui/*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/new-ui/index.html'));
+});
+// 为所有路由添加认证（白名单：登录页、静态资源、/new 旧版前端、/ui 新前端、/emby 媒体服务API由自身鉴权管理）
 app.use((req, res, next) => {
     if (req.path === '/' || req.path === '/login' 
         || req.path.startsWith('/new')
+        || req.path.startsWith('/ui')
         || req.path.startsWith('/emby')
         || req.path === '/api/auth/login' 
         || req.path === '/emby/notify'

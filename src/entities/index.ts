@@ -146,6 +146,10 @@ export class Task {
     @Column('text', { nullable: true, default: 'auto' })
     shareMode!: string;
 
+    /** 任务状态: pending/processing/completed/error/disabled */
+    @Column('text', { nullable: true, default: 'pending' })
+    status!: string;
+
     @Column('text', { nullable: true, default: 'personal' })
     pathType!: string;
 
