@@ -1,4 +1,5 @@
 let accountsList = []
+window.accountsList = accountsList;
 let chooseAccount = null
 // 账号相关功能
 async function fetchAccounts(updateSelect = false) {
@@ -18,7 +19,14 @@ async function fetchAccounts(updateSelect = false) {
             select.innerHTML = '' 
         }
         accountsList = data.data
+        window.accountsList = accountsList;
+        const driveNames = { cloud189: '天翼云盘', quark: '夸克网盘', uc: 'UC网盘', aliyun: '阿里云盘' };
+        const statusColors = { ok: '#0a8f47', invalid: '#cf1322', unknown: '#999' };
         data.data.forEach(account => {
+            const driveType = account.driveType || 'cloud189';
+            const driveName = driveNames[driveType] || driveType;
+            const runtimeStatus = account.runtimeStatus || 'unknown';
+            const statusText = runtimeStatus === 'ok' ? '✓ 正常' : runtimeStatus === 'invalid' ? '✗ 异常' : '未巡检';
             tbody.innerHTML += `
                 <tr>
                     <td><span class="default-star" onclick="setDefaultAccount(${account.id})" title="设为默认账号">
@@ -28,6 +36,8 @@ async function fetchAccounts(updateSelect = false) {
                         <button class="btn-danger" onclick="deleteAccount(${account.id})">删除</button>
                         </td>
                     <td data-label='账户名'>${account.username}</td>
+                    <td data-label='网盘类型'><span style="font-size:12px;padding:2px 8px;border-radius:10px;background:#e8f4ff;color:#0b68d6;">${driveName}</span></td>
+                    <td data-label='状态' style="color:${statusColors[runtimeStatus] || '#999'}">${statusText}</td>
                     <td data-label='别名' onclick="updateAlias(${account.id}, '${account.alias || ''}')">${account.alias}</td>
                     <td data-label='个人容量'>${formatBytes(account.capacity.cloudCapacityInfo.usedSize) + '/' + formatBytes(account.capacity.cloudCapacityInfo.totalSize)}</td>
                     <td data-label='家庭容量'>${formatBytes(account.capacity.familyCapacityInfo.usedSize) + '/' + formatBytes(account.capacity.familyCapacityInfo.totalSize)}</td>
@@ -39,8 +49,9 @@ async function fetchAccounts(updateSelect = false) {
             if (updateSelect) {
                 // n_打头的账号不显示在下拉列表中
                 if (!account.username.startsWith('n_')) {
+                    const label = `${account.alias || account.username} (${driveName})`;
                     select.innerHTML += `
-                    <option value="${account.id}" ${account.isDefault?"selected":''}>${account.username}</option>
+                    <option value="${account.id}" ${account.isDefault?"selected":''}>${label}</option>
                 `;
                 }
             }

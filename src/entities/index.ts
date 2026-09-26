@@ -72,6 +72,18 @@ export class Account {
     /** 阿里云盘 drive_id */
     @Column('text', { nullable: true, default: '' })
     driveId!: string;
+
+    /** 健康巡检状态：ok / invalid / unknown */
+    @Column('text', { nullable: true, default: 'unknown' })
+    runtimeStatus!: string;
+
+    /** 最后一次巡检时间 */
+    @Column('datetime', { nullable: true, transformer: beijingDatetimeTransformer })
+    lastCheckedAt!: Date;
+
+    /** 最后一次巡检错误信息 */
+    @Column('text', { nullable: true })
+    lastCheckError!: string;
 }
 
 @Entity()

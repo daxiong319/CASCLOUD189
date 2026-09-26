@@ -9,6 +9,8 @@ const path = require('path');
 const { default: cloudSaverSDK } = require('../sdk/cloudsaver/sdk');
 const ProxyUtil = require('../utils/ProxyUtil');
 const cloud189Utils = require('../utils/Cloud189Utils');
+const { ShareLinkParser } = require('./ShareLinkParser');
+const { DriverRegistry } = require('../drivers/DriverRegistry');
 
 class TelegramBotService {
     constructor(token, chatId) {
@@ -201,6 +203,52 @@ class TelegramBotService {
             } catch (error) {
                 console.log(error)
                 this.bot.sendMessage(chatId, `处理失败: ${error.message}`);
+            }
+        });
+
+        // ★ 多网盘分享链接：夸克 / UC / 阿里（自动识别类型并分派驱动转存）
+        this.bot.onText(/(pan\.quark\.cn|drive\.uc\.cn|alipan\.com|aliyundrive\.com)/, async (msg) => {
+            const chatId = msg.chat.id;
+            if (!this._checkChatId(chatId)) return;
+            if (this.isSearchMode) return;
+            try {
+                if (!this._checkUserId(chatId)) return;
+
+                const parsed = ShareLinkParser.parse(msg.text);
+                if (!parsed) {
+                    await this.bot.sendMessage(chatId, '无法识别分享链接格式');
+                    return;
+                }
+
+                const driveName = ShareLinkParser.displayName(parsed.driveType);
+                await this.bot.sendMessage(chatId, `🔗 识别到 ${driveName} 分享链接，开始转存...`);
+
+                // 找到该网盘类型的默认账号（或第一个可用账号）
+                const accounts = await this.accountRepo.find({ where: { isActive: true } });
+                const targetAccount = accounts.find(a => a.driveType === parsed.driveType && a.isDefault)
+                    || accounts.find(a => a.driveType === parsed.driveType)
+                    || accounts.find(a => !a.driveType || a.driveType === 'cloud189');
+
+                if (!targetAccount) {
+                    await this.bot.sendMessage(chatId, `未找到 ${driveName} 账号，请先在 Web 端「网盘驱动」页添加`);
+                    return;
+                }
+                if ((targetAccount.driveType || 'cloud189') !== parsed.driveType) {
+                    await this.bot.sendMessage(chatId, `⚠️ 未配置 ${driveName} 账号（当前只有 ${(targetAccount.driveType || 'cloud189')} 账号），请先在 Web 端添加`);
+                    return;
+                }
+
+                // 驱动分派转存（保存到账号根目录；如需指定目录可后续接入常用目录选择）
+                const driver = await DriverRegistry.getDriverForAccount(targetAccount);
+                if (!driver.saveShare) {
+                    await this.bot.sendMessage(chatId, `${driveName} 暂不支持分享转存`);
+                    return;
+                }
+                const result = await driver.saveShare(parsed.shareUrl, 'root');
+                await this.bot.sendMessage(chatId, `✅ 转存成功\n文件: ${result.fileName}\n目录: 根目录`);
+            } catch (error) {
+                console.log(error);
+                this.bot.sendMessage(chatId, `转存失败: ${error.message}`);
             }
         });
 

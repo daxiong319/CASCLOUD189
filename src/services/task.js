@@ -206,7 +206,13 @@ class TaskService {
         // 获取分享信息
         const account = await this.accountRepo.findOneBy({ id: taskDto.accountId });
         if (!account) throw new Error('账号不存在');
-        
+
+        // ★ 多网盘支持：非天翼账号（quark/uc/aliyun）走统一驱动转存流程
+        const driveType = account.driveType || 'cloud189';
+        if (driveType !== 'cloud189') {
+            return await this._createMultiDriveTask(taskDto, account, driveType);
+        }
+
         // 解析url
         const {url: parseShareLink, accessCode} = cloud189Utils.parseCloudShare(taskDto.shareLink)
         if (accessCode) {
@@ -271,6 +277,42 @@ class TaskService {
         }
         return tasks;
     }
+
+    /**
+     * ★ 多网盘任务创建：非天翼账号（quark/uc/aliyun）统一走 DriverRegistry 驱动转存。
+     * 与天翼流程不同：驱动 saveShare 一步完成「解析+转存」，任务记录转存结果与错误信息。
+     */
+    async _createMultiDriveTask(taskDto, account, driveType) {
+        const { DriverRegistry } = require('../drivers/DriverRegistry');
+        const driver = await DriverRegistry.getDriverForAccount(account);
+        if (!driver.saveShare) {
+            throw new Error(`${driver.displayName} 暂不支持分享转存`);
+        }
+
+        const shareLink = String(taskDto.shareLink || '').trim();
+        // 目标目录：多网盘网盘根目录（常用目录体系暂仅天翼语义，非天翼以 root 落盘）
+        const targetFolderId = 'root';
+
+        // 驱动转存
+        const result = await driver.saveShare(shareLink, targetFolderId);
+
+        // 创建任务记录（复用 Task 实体，标注 driveType 相关字段）
+        const task = this.taskRepo.create({
+            accountId: account.id,
+            shareLink,
+            targetFolderId,
+            resourceName: taskDto.taskName || result.fileName,
+            realFolderId: result.fileId,
+            realFolderName: result.fileName,
+            shareFolderName: result.fileName,
+            lastError: null,
+            lastCheckTime: new Date(),
+            pathType: 'personal'
+        });
+        await this.taskRepo.save(task);
+        return [task];
+    }
+
     async increaseShareFileAccessCount(cloud189, shareId ) {
         await cloud189.increaseShareFileAccessCount(shareId)
     }

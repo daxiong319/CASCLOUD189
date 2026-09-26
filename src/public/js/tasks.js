@@ -888,6 +888,34 @@ async function parseShareLink() {
     }
     // urldecodeshareLink
     shareLink = decodeURIComponent(shareLink);
+
+    // ★ 多网盘识别：非天翼分享链接提示使用对应网盘账号，天翼保持原解析流程
+    const multiDriveMatch = shareLink.match(/(pan\.quark\.cn|drive\.uc\.cn|alipan\.com|aliyundrive\.com)/i);
+    if (multiDriveMatch) {
+        const driveNames = { 'pan.quark.cn': '夸克网盘', 'drive.uc.cn': 'UC网盘', 'alipan.com': '阿里云盘', 'aliyundrive.com': '阿里云盘' };
+        const driveName = driveNames[multiDriveMatch[1].toLowerCase()] || '其他网盘';
+        // 检查选中账号的网盘类型是否匹配
+        const selectedAccount = (window.accountsList || []).find(a => a.id == accountId);
+        const accDrive = selectedAccount?.driveType || 'cloud189';
+        const typeMap = { 'pan.quark.cn': 'quark', 'drive.uc.cn': 'uc', 'alipan.com': 'aliyun', 'aliyundrive.com': 'aliyun' };
+        const needDrive = typeMap[multiDriveMatch[1].toLowerCase()];
+        if (accDrive !== needDrive) {
+            shareParseError.textContent = `这是 ${driveName} 分享链接，请选择 ${driveName} 账号（当前选择的是 ${accDrive === 'cloud189' ? '天翼云盘' : accDrive} 账号）`;
+            return;
+        }
+        // 非天翼链接：提示可直接创建任务（驱动转存流程）
+        const shareFoldersGroup = document.querySelector('.share-folders-group');
+        shareFoldersGroup.style.display = 'block';
+        document.getElementById('shareFoldersList').innerHTML =
+            `<div class="folder-item"><label><input type="checkbox" name="chooseShareFolder" value="root" checked style="display:none;">✅ 已识别 ${driveName} 分享链接，创建任务后将由 ${driveName} 驱动自动转存</label></div>`;
+        const taskNameInput = document.getElementById('taskName');
+        if (taskNameInput && !taskNameInput.value) {
+            taskNameInput.value = `${driveName}转存_${new Date().toISOString().slice(5, 10)}`;
+            taskNameInput.readOnly = false;
+        }
+        return;
+    }
+
     const {url: parseShareLink, accessCode: parseAccessCode} =  parseCloudShare(shareLink)
     if (parseAccessCode) {
         accessCode = parseAccessCode;
