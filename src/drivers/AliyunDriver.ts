@@ -180,4 +180,51 @@ export class AliyunDriver extends BaseDriveDriver {
             };
         }, 60 * 60 * 1000);
     }
+
+    /**
+     * 阿里云盘分享转存（开放协议）：
+     *  1) POST /adrive/v1.0/openFile/share/updateShareLink  或直接读取
+     *     实际流程: share_link get -> list share files -> create by share
+     */
+    async saveShare(shareUrl: string, targetFolderId: string): Promise<{ fileId: string; fileName: string }> {
+        const urlObj = new URL(shareUrl);
+        const shareId = urlObj.searchParams.get('share_id')
+            || shareUrl.match(/s\/([a-zA-Z0-9]+)/)?.[1]
+            || '';
+        if (!shareId) throw new Error(`无法从分享链接解析 share_id: ${shareUrl}`);
+
+        const driveId = (this.account as any)?.driveId || 'default';
+
+        // 获取分享 token（openApi 中分享保存需要 share_token）
+        const tokenRes: any = await this.request('/adrive/v1.0/openFile/share/getShareToken', 'POST', {
+            share_id: shareId
+        });
+        const shareToken = tokenRes?.share_token;
+        if (!shareToken) throw new Error(`获取阿里云盘分享 token 失败: ${JSON.stringify(tokenRes)}`);
+
+        // 列出分享根目录文件
+        const listRes: any = await this.request('/adrive/v1.0/openFile/share/listFile', 'POST', {
+            share_id: shareId,
+            share_token: shareToken,
+            parent_file_id: 'root',
+            limit: 100
+        });
+        const items = listRes?.items || [];
+        if (items.length === 0) throw new Error(`分享目录为空或已失效: ${shareUrl}`);
+
+        // 保存全部顶层条目到目标目录
+        const firstFile = items[0];
+        const saveRes: any = await this.request('/adrive/v1.0/openFile/share/save', 'POST', {
+            share_id: shareId,
+            share_token: shareToken,
+            file_id: firstFile.file_id,
+            to_drive_id: driveId,
+            to_parent_file_id: targetFolderId || 'root',
+            auto_rename: true
+        });
+        const fileId = saveRes?.file_id;
+        const fileName = saveRes?.name || firstFile?.name;
+        if (!fileId) throw new Error(`阿里云盘分享转存失败: ${JSON.stringify(saveRes)}`);
+        return { fileId: String(fileId), fileName: String(fileName) };
+    }
 }

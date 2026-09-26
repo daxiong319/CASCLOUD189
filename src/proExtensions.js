@@ -10,6 +10,7 @@ const { CasTempFileDeleteQueueService } = require('./services/CasTempFileDeleteQ
 const { DriverRegistry } = require('./drivers/DriverRegistry');
 const { BaseDriveDriver } = require('./drivers/BaseDriveDriver');
 const { buildDriverRoutes } = require('./routes/driverRoutes');
+const { buildPlaybackRoutes } = require('./routes/playbackRoutes');
 
 function setupProExtensions(app, AppDataSource, Cloud189Service) {
     const { Account } = require('./entities');
@@ -17,9 +18,12 @@ function setupProExtensions(app, AppDataSource, Cloud189Service) {
     // 0. 多网盘驱动体系：恢复持久化清理队列 + 注册统一驱动 API
     CasTempFileDeleteQueueService.restoreFromDisk();
     app.use('/api/drives', buildDriverRoutes());
+    // 0.1 跨盘播放加速：直链解析（302）/ 流式代理（Range 透传）/ 直链信息（供 Go proxy）
+    app.use('/api/play', buildPlaybackRoutes());
     // 周期清理过期直链缓存（每 10 分钟）
     setInterval(() => BaseDriveDriver.purgeExpiredUrlCache(), 10 * 60 * 1000);
     console.log(`[Drivers] 多网盘驱动体系就绪: ${DriverRegistry.listDrivers().map(d => d.displayName).join('、')}`);
+    console.log('[Playback] 跨盘播放加速就绪 (/api/play/:accountId/{redirect,stream,info})');
 
     // 1. 挂载 Casby 虚拟 Emby 服务
     mountCasby(app);

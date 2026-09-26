@@ -162,8 +162,10 @@ AppDataSource.initialize().then(async () => {
                 cloudCapacityInfo: {usedSize:0,totalSize:0},
                 familyCapacityInfo: {usedSize:0,totalSize:0}
             }
+            // 多网盘支持：仅天翼账号获取容量；其他网盘由驱动健康巡检代替
+            const isCloud189 = !account.driveType || account.driveType === 'cloud189';
             // 如果账号名是s打头 则不获取容量
-            if (!account.username.startsWith('n_')) {
+            if (isCloud189 && !account.username.startsWith('n_')) {
                 const cloud189 = Cloud189Service.getInstance(account);
                 const capacity = await cloud189.getUserSizeInfo()
                 if (capacity && capacity.res_code == 0) {
@@ -180,9 +182,15 @@ AppDataSource.initialize().then(async () => {
 
     app.post('/api/accounts', async (req, res) => {
         try {
-            const account = accountRepo.create(req.body);
-            // 尝试登录, 登录成功写入store, 如果需要验证码, 则返回用户验证码图片
-            if (!account.username.startsWith('n_') && account.password) {
+            const driveType = req.body.driveType || 'cloud189';
+            const isCloud189 = driveType === 'cloud189';
+            const account = accountRepo.create({
+                ...req.body,
+                driveType,
+                username: req.body.username || req.body.alias || `${driveType}_${Date.now()}`
+            });
+            // 多网盘支持：天翼账号保持原登录流程；其他网盘凭据直接落库（健康巡检验证）
+            if (isCloud189 && !account.username.startsWith('n_') && account.password) {
                 // 尝试登录
                 const cloud189 = Cloud189Service.getInstance(account);
                 const loginResult = await cloud189.login(account.username, account.password, req.body.validateCode);
@@ -199,6 +207,13 @@ AppDataSource.initialize().then(async () => {
                     }
                     res.json({ success: false, error: loginResult.message });
                     return;
+                }
+            }
+            // 非天翼账号：校验驱动类型已注册
+            if (!isCloud189) {
+                const { DriverRegistry } = require('./drivers/DriverRegistry');
+                if (!DriverRegistry.isSupported(driveType)) {
+                    return res.json({ success: false, error: `暂不支持的网盘类型: ${driveType}` });
                 }
             }
             await accountRepo.save(account);

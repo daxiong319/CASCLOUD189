@@ -198,6 +198,77 @@ export class QuarkUcDriver extends BaseDriveDriver {
             return { url: String(url), headers: { 'User-Agent': QuarkUcDriver.UA } };
         });
     }
+
+    /**
+     * 夸克/UC 分享转存（Web 公开协议三步）：
+     *  1) token/get  → 获取 stoken（传 extracted 的 passcode）
+     *  2) detail     → 分享详情，展开目录树拿到全部 fid/fid_token
+     *  3) task/save  → 保存到目标目录（fid_list + fid_token_list）
+     */
+    async saveShare(shareUrl: string, targetFolderId: string): Promise<{ fileId: string; fileName: string }> {
+        const urlObj = new URL(shareUrl);
+        const passcode = urlObj.searchParams.get('passcode')
+            || urlObj.searchParams.get('pwd')
+            || shareUrl.match(/提取码[::]\s*([a-z0-9]{4})/i)?.[1]
+            || '';
+        const pwdId = urlObj.searchParams.get('pwd_id')
+            || shareUrl.match(/s\/([a-z0-9]+)/i)?.[1]
+            || '';
+        if (!pwdId) throw new Error(`无法从分享链接解析 pwd_id: ${shareUrl}`);
+
+        // 步骤 1: 获取 stoken
+        const tokenRes = await this.request('/share/token', 'POST', {
+            pwd_id: pwdId,
+            passcode
+        });
+        const stoken = tokenRes?.stoken;
+        if (!stoken) throw new Error(`获取${this.displayName}分享 stoken 失败: ${JSON.stringify(tokenRes)}`);
+
+        // 步骤 2: 分享详情（展开根目录，分页拉全）
+        const entries: { fid: string; fidToken: string; fileName: string; isFolder: boolean }[] = [];
+        let page = 1;
+        while (true) {
+            const detailRes = await this.request('/share/detail', 'GET', undefined, {
+                pwd_id: pwdId,
+                stoken,
+                pdir_fid: '0',
+                _page: page,
+                _size: 200,
+                _fetch_banner: 0,
+                _fetch_share: 0,
+                _fetch_total: 1,
+                _sort: 'file_name:asc'
+            });
+            const list = detailRes?.list || [];
+            for (const f of list) {
+                entries.push({
+                    fid: String(f.fid),
+                    fidToken: String(f.fid_token || ''),
+                    fileName: f.file_name,
+                    isFolder: !!f.dir
+                });
+            }
+            const total = Number(detailRes?._total || detailRes?.total || entries.length);
+            if (entries.length >= total || list.length === 0 || page > 50) break;
+            page++;
+        }
+        if (entries.length === 0) throw new Error(`分享目录为空或已失效: ${shareUrl}`);
+
+        // 步骤 3: 保存（文件直接转存；若为根目录混合结构，保存全部顶层条目）
+        const saveRes = await this.request('/share/save', 'POST', {
+            pwd_id: pwdId,
+            stoken,
+            pdir_fid: targetFolderId || '0',
+            fid_list: entries.map(e => e.fid),
+            fid_token_list: entries.map(e => e.fidToken),
+        });
+        const savedList = saveRes?.save_as_top_save_as?.save_as || saveRes?.data?.save_as || saveRes?.save_as;
+        const firstSaved = Array.isArray(savedList) ? savedList[0] : savedList;
+        const fileId = firstSaved?.fid || firstSaved?.file_id;
+        const fileName = firstSaved?.file_name || entries[0]?.fileName;
+        if (!fileId) throw new Error(`${this.displayName} 分享转存失败: ${JSON.stringify(saveRes)}`);
+        return { fileId: String(fileId), fileName: String(fileName) };
+    }
 }
 
 /** 夸克驱动 */

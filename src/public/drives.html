@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网盘驱动管理 - CASCLOUD189</title>
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/components.css">
+    <link rel="stylesheet" href="/css/modal.css">
+    <link rel="stylesheet" href="/css/table.css">
+    <link rel="icon" href="/favicon/favicon.svg" type="image/svg+xml">
+    <style>
+        .driver-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-top: 16px; }
+        .driver-card { background: var(--card-bg, #fff); border: 1px solid var(--border-color, #e5e5e5); border-radius: 12px; padding: 20px; transition: box-shadow .2s; }
+        .driver-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+        .driver-card h3 { margin: 0 0 4px; font-size: 17px; display:flex; align-items:center; gap:8px; }
+        .driver-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e8f4ff; color: #0b68d6; }
+        .driver-cap { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+        .cap-chip { font-size:12px; padding:3px 10px; border-radius:12px; background:#f0f2f5; color:#555; }
+        .cap-chip.on { background:#e6f7ee; color:#0a8f47; }
+        .btn-row { display:flex; gap:8px; margin-top:12px; }
+        .btn-primary, .btn-warning { cursor:pointer; border:none; border-radius:8px; padding:8px 16px; font-size:14px; }
+        .btn-primary { background:#1677ff; color:#fff; }
+        .btn-warning { background:#faad14; color:#fff; }
+        .btn-ghost { background:transparent; border:1px solid #d9d9d9; border-radius:8px; padding:8px 16px; cursor:pointer; }
+        table.data-table { width:100%; border-collapse:collapse; margin-top:16px; }
+        table.data-table th, table.data-table td { padding:10px 12px; text-align:left; border-bottom:1px solid #eee; font-size:14px; }
+        .status-ok { color:#0a8f47; } .status-bad { color:#cf1322; }
+        .form-group { margin-bottom:12px; }
+        .form-group label { display:block; margin-bottom:4px; font-size:13px; font-weight:600; }
+        .form-group input, .form-group textarea { width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #d9d9d9; border-radius:6px; }
+        .toast { position:fixed; top:20px; right:20px; padding:12px 20px; border-radius:8px; color:#fff; background:#1677ff; z-index:9999; display:none; }
+        .section { margin-top:24px; }
+        .section h2 { font-size:18px; margin-bottom:8px; }
+    </style>
+</head>
+<body>
+    <div class="container" style="max-width:1200px; margin:24px auto; padding:0 16px;">
+        <h1>🚀 多网盘驱动管理</h1>
+        <p style="color:#666;">统一驱动体系：天翼云盘 / 夸克网盘 / UC 网盘 / 阿里云盘 — 支持跨盘 CAS 秒传与播放加速</p>
+
+        <!-- 驱动能力卡片 -->
+        <div class="section">
+            <h2>已支持驱动</h2>
+            <div id="driverGrid" class="driver-grid"></div>
+        </div>
+
+        <!-- 账号列表 -->
+        <div class="section">
+            <h2>网盘账号</h2>
+            <div class="btn-row">
+                <button class="btn-primary" onclick="openAddAccountModal()">添加网盘账号</button>
+                <button class="btn-ghost" onclick="checkAllHealth()">全部健康巡检</button>
+                <a class="btn-ghost" href="/" style="text-decoration:none; line-height:1.5;">返回主页</a>
+            </div>
+            <table class="data-table" id="accountTable">
+                <thead>
+                    <tr><th>ID</th><th>别名</th><th>网盘类型</th><th>状态</th><th>操作</th></tr>
+                </thead>
+                <tbody id="accountTbody"></tbody>
+            </table>
+        </div>
+
+        <!-- 跨盘秒传恢复 -->
+        <div class="section">
+            <h2>⚡ CAS 跨盘秒传</h2>
+            <p style="color:#888; font-size:13px;">粘贴 V1/V2 CAS 清单（JSON 或 Base64），选择目标账号即可秒传入库任意网盘。V2 清单含多维特征（md5/sha1/preHash），可跨盘通用。</p>
+            <div class="form-group">
+                <label>选择目标账号</label>
+                <select id="rapidAccount" style="width:280px; padding:8px;"></select>
+            </div>
+            <div class="form-group">
+                <label>目标目录 ID（根目录留空 / 填 0 / root）</label>
+                <input type="text" id="rapidFolder" placeholder="root" style="width:280px;">
+            </div>
+            <div class="form-group">
+                <label>CAS 清单内容</label>
+                <textarea id="rapidCas" rows="6" placeholder='{"version":2,"fileName":"电影.mkv","fileSize":10737418240,"hashes":{"md5":"...","sha1":"..."}}'></textarea>
+            </div>
+            <button class="btn-primary" onclick="doRapidUpload()">一键秒传</button>
+        </div>
+    </div>
+
+    <!-- 添加账号 Modal -->
+    <div id="addAccountModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:100;">
+        <div class="modal-content" style="background:#fff; border-radius:12px; max-width:440px; margin:80px auto; padding:24px;">
+            <h3>添加网盘账号</h3>
+            <div class="form-group">
+                <label>网盘类型</label>
+                <select id="addDriveType" style="width:100%; padding:8px;" onchange="renderDynFields()"></select>
+            </div>
+            <div class="form-group">
+                <label>账号别名</label>
+                <input type="text" id="addAlias" placeholder="例：夸克主账号">
+            </div>
+            <div id="dynFields"></div>
+            <div class="btn-row">
+                <button class="btn-primary" onclick="submitAccount()">保存</button>
+                <button class="btn-ghost" onclick="closeAddAccountModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        let drivers = [];
+        let accounts = [];
+
+        const toast = (msg) => {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 3000);
+        };
+        const api = async (url, opts) => {
+            const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...opts });
+            return res.json();
+        };
+
+        // ============ 驱动卡片 ============
+        async function loadDrivers() {
+            const d = await api('/api/drives');
+            drivers = d.data || [];
+            document.getElementById('driverGrid').innerHTML = drivers.map(x => `
+                <div class="driver-card">
+                    <h3>${x.displayName} <span class="driver-badge">${x.driveType}</span></h3>
+                    <div class="driver-cap">
+                        ${x.capabilities.rapidUpload ? '<span class="cap-chip on">秒传</span>' : ''}
+                        ${x.capabilities.shareSave ? '<span class="cap-chip on">分享转存</span>' : ''}
+                        ${x.capabilities.directLink ? '<span class="cap-chip on">直链播放</span>' : ''}
+                        ${x.capabilities.familyCloud ? '<span class="cap-chip on">家庭云</span>' : ''}
+                    </div>
+                    <div class="btn-row">
+                        <button class="btn-primary" onclick="openAddAccountModal('${x.driveType}')">添加账号</button>
+                    </div>
+                </div>`).join('');
+
+            // 网盘类型下拉
+            document.getElementById('addDriveType').innerHTML =
+                drivers.map(x => `<option value="${x.driveType}">${x.displayName}</option>`).join('');
+        }
+
+        // ============ 动态登录表单（按驱动 configFields 渲染）============
+        function renderDynFields() {
+            const type = document.getElementById('addDriveType').value;
+            const meta = drivers.find(x => x.driveType === type);
+            document.getElementById('dynFields').innerHTML = (meta?.configFields || []).map(f => `
+                <div class="form-group">
+                    <label>${f.label}${f.required ? ' *' : ''}</label>
+                    ${f.type === 'textarea'
+                        ? `<textarea id="dyn_${f.key}" rows="3"></textarea>`
+                        : `<input type="${f.type}" id="dyn_${f.key}">`}
+                </div>`).join('');
+        }
+
+        function openAddAccountModal(preType) {
+            document.getElementById('addAccountModal').style.display = 'block';
+            if (preType) document.getElementById('addDriveType').value = preType;
+            renderDynFields();
+        }
+        function closeAddAccountModal() { document.getElementById('addAccountModal').style.display = 'none'; }
+
+        // ============ 账号列表 ============
+        async function loadAccounts() {
+            const d = await api('/api/accounts');
+            accounts = (d.data || []).filter(a => a.isActive);
+            document.getElementById('accountTbody').innerHTML = accounts.map(a => `
+                <tr>
+                    <td>${a.id}</td>
+                    <td>${a.alias || a.username || '-'}</td>
+                    <td>${(a.driveType || 'cloud189')}</td>
+                    <td id="health-${a.id}"><span style="color:#999">未巡检</span></td>
+                    <td>
+                        <button class="btn-ghost" onclick="checkHealth(${a.id})">巡检</button>
+                        <button class="btn-warning" onclick="deleteAccount(${a.id})">删除</button>
+                    </td>
+                </tr>`).join('');
+
+            document.getElementById('rapidAccount').innerHTML =
+                accounts.map(a => `<option value="${a.id}">#${a.id} ${a.alias || a.username} (${a.driveType || 'cloud189'})</option>`).join('');
+        }
+
+        async function checkHealth(id) {
+            document.getElementById(`health-${id}`).innerHTML = '<span style="color:#999">巡检中...</span>';
+            const d = await api(`/api/drives/${await accountDriveType(id)}/health?accountId=${id}`);
+            const el = document.getElementById(`health-${id}`);
+            el.innerHTML = d.success && d.data.valid
+                ? `<span class="status-ok">✓ ${d.data.message || '正常'}</span>`
+                : `<span class="status-bad">✗ ${d.data?.message || d.error || '异常'}</span>`;
+        }
+        async function checkAllHealth() {
+            const d = await api('/api/drives/health');
+            (d.data || []).forEach(h => {
+                const el = document.getElementById(`health-${h.accountId}`);
+                if (el) el.innerHTML = h.valid
+                    ? `<span class="status-ok">✓ ${h.message || '正常'}</span>`
+                    : `<span class="status-bad">✗ ${h.message || '异常'}</span>`;
+            });
+            toast('巡检完成');
+        }
+        async function accountDriveType(id) {
+            const a = accounts.find(x => x.id == id);
+            return a?.driveType || 'cloud189';
+        }
+        async function deleteAccount(id) {
+            if (!confirm('确认删除该账号？')) return;
+            await api(`/api/accounts/${id}`, { method: 'DELETE' });
+            loadAccounts(); toast('已删除');
+        }
+
+        // ============ 添加账号 ============
+        async function submitAccount() {
+            const driveType = document.getElementById('addDriveType').value;
+            const meta = drivers.find(x => x.driveType === driveType);
+            const body = { alias: document.getElementById('addAlias').value, driveType };
+            let ok = true;
+            (meta?.configFields || []).forEach(f => {
+                const v = document.getElementById(`dyn_${f.key}`)?.value?.trim();
+                if (f.required && !v) ok = false;
+                body[f.key] = v;
+            });
+            if (!ok) return toast('请填写必填凭据字段');
+
+            const d = await api('/api/accounts', { method: 'POST', body: JSON.stringify(body) });
+            if (d.success) { closeAddAccountModal(); loadAccounts(); toast('账号已添加'); }
+            else toast(d.error || '添加失败');
+        }
+
+        // ============ 跨盘秒传 ============
+        async function doRapidUpload() {
+            const accountId = document.getElementById('rapidAccount').value;
+            const targetFolderId = document.getElementById('rapidFolder').value?.trim() || 'root';
+            const casContent = document.getElementById('rapidCas').value?.trim();
+            if (!casContent) return toast('请粘贴 CAS 清单内容');
+
+            const d = await api(`/api/drives/account/${accountId}/rapid`, {
+                method: 'POST',
+                body: JSON.stringify({ targetFolderId, casContent })
+            });
+            toast(d.message || (d.success ? '秒传成功' : `失败: ${d.error}`));
+        }
+
+        // ============ 初始化 ============
+        (async () => { await loadDrivers(); await loadAccounts(); })();
+    </script>
+</body>
+</html>

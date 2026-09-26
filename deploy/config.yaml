@@ -16,3 +16,21 @@ naming_template:
 category:
   enabled: true
   config_path: "category.yaml"
+
+# ============================================================
+# 跨盘播放加速：反代上游指向 Node 服务的 /api/play 直链解析层
+# Node 侧按账号网盘类型（天翼/夸克/UC/阿里）自动分派驱动，
+# 本层只做 302 跟随缓存 + Range 分片转发 + 并发限速。
+# ============================================================
+playback:
+  # Node 服务地址（容器内同宿主互通）
+  upstream: "http://127.0.0.1:3000"
+  # 直链解析端点（Node 返回 302 或流式代理）
+  resolve_path: "/api/play/{accountId}/redirect"
+  info_path: "/api/play/{accountId}/info"
+  # 直链缓存时长（秒），与各网盘直链时效对齐，过期前主动刷新
+  cache_ttl: 900
+  # 同一账号并发播放上限（避免高频换直链触发风控）
+  max_concurrent_per_account: 3
+  # Range 分片透传（蓝光原盘 4K seek 必需）
+  support_range: true

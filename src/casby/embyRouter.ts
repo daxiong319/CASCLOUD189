@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { AppDataSource } from '../database';
-import { EmbyLibrary, EmbyPlaybackState, EmbyToken, EmbyUser, Task } from '../entities';
+import { EmbyLibrary, EmbyPlaybackState, EmbyToken, EmbyUser, Task, Account } from '../entities';
 import { attachUserContext, requireCasbyUser } from './auth';
 import { verifyPassword } from './password';
 import {
@@ -176,6 +176,68 @@ export function buildEmbyRouter(): Router {
 
     router.post('/Sessions/Playing/Stopped', requireCasbyUser, (req: Request, res: Response) => {
         res.status(204).end();
+    });
+
+    // 6. 播放信息（Emby 客户端播放核心入口）：
+    //    返回 MediaSource 的 Path 指向本系统播放加速路由（302/stream），
+    //    由 DriverRegistry 按账号网盘类型解析直链。
+    router.post('/Items/:itemId/PlaybackInfo', requireCasbyUser, async (req: Request, res: Response) => {
+        try {
+            const { itemId } = req.params;
+            const host = `${req.protocol}://${req.get('host')}`;
+
+            // 解析 itemId: m_<taskId>（跨盘播放引用 accountId:fileId 格式存于 EmbyLibrary/扩展字段）
+            // 默认回退：第一账号 + 原始 id
+            const taskRepo = AppDataSource.getRepository(Task);
+            const task = itemId.startsWith('m_')
+                ? await taskRepo.findOne({ where: { id: parseInt(itemId.slice(2), 10) } })
+                : null;
+
+            const accountRepo = AppDataSource.getRepository(Account);
+            const account = task
+                ? await accountRepo.findOne({ where: { id: task.accountId } })
+                : await accountRepo.findOne({ where: { isDefault: true } });
+
+            const mediaSourceId = `cas_${itemId}`;
+            res.json({
+                MediaSources: [{
+                    Id: mediaSourceId,
+                    Name: task?.resourceName || itemId,
+                    Path: `${host}/api/play/${account?.id ?? 0}/redirect?fileId=${encodeURIComponent(task?.realFolderId || itemId)}`,
+                    Protocol: 'Http',
+                    Container: 'mp4,mkv,ts,avi,mov',
+                    IsRemote: true,
+                    SupportsDirectPlay: true,
+                    SupportsDirectStream: true,
+                    SupportsTranscoding: false,
+                    DirectStreamUrl: `/api/play/${account?.id ?? 0}/stream?fileId=${encodeURIComponent(task?.realFolderId || itemId)}`,
+                }],
+                PlaySessionId: `cas-${Date.now()}`
+            });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // 7. 视频流入口（老客户端 /Videos/<id>/stream 兼容）
+    router.get('/Videos/:itemId/stream', async (req: Request, res: Response) => {
+        try {
+            const { itemId } = req.params;
+            const taskRepo = AppDataSource.getRepository(Task);
+            const task = itemId.startsWith('m_')
+                ? await taskRepo.findOne({ where: { id: parseInt(itemId.slice(2), 10) } })
+                : null;
+
+            const accountRepo = AppDataSource.getRepository(Account);
+            const account = task
+                ? await accountRepo.findOne({ where: { id: task.accountId } })
+                : await accountRepo.findOne({ where: { isDefault: true } });
+
+            const fileId = task?.realFolderId || itemId;
+            res.redirect(302, `/api/play/${account?.id ?? 0}/redirect?fileId=${encodeURIComponent(fileId)}`);
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
     });
 
     return router;
