@@ -64,7 +64,7 @@
         <!-- 跨盘秒传恢复 -->
         <div class="section">
             <h2>⚡ CAS 跨盘秒传</h2>
-            <p style="color:#888; font-size:13px;">粘贴 V1/V2 CAS 清单（JSON 或 Base64），选择目标账号即可秒传入库任意网盘。V2 清单含多维特征（md5/sha1/preHash），可跨盘通用。</p>
+            <p style="color:#888; font-size:13px;">支持粘贴 V1/V2 JSON、Base64（含 cloud189:// 协议头）或论坛管道符格式（文件名|大小|MD5|SliceMD5），秒传还原入库。</p>
             <div class="form-group">
                 <label>选择目标账号</label>
                 <select id="rapidAccount" style="width:280px; padding:8px;"></select>
@@ -75,9 +75,53 @@
             </div>
             <div class="form-group">
                 <label>CAS 清单内容</label>
-                <textarea id="rapidCas" rows="6" placeholder='{"version":2,"fileName":"电影.mkv","fileSize":10737418240,"hashes":{"md5":"...","sha1":"..."}}'></textarea>
+                <textarea id="rapidCas" rows="6" placeholder='支持以下格式：&#10;1. JSON: {"version":2,"fileName":"电影.mkv","fileSize":10737418240,"hashes":{"md5":"..."}}&#10;2. 管道符: 电影.mkv|10737418240|E80B5017098950FC58AAD83C8C14978E|E80B5017098950FC58AAD83C8C14978E&#10;3. cloud189://Base64'></textarea>
             </div>
             <button class="btn-primary" onclick="doRapidUpload()">一键秒传</button>
+        </div>
+
+        <!-- CAS 指纹镜像生成（借鉴 cloud-auto-save-x） -->
+        <div class="section">
+            <h2>📦 CAS 指纹备份与镜像任务</h2>
+            <p style="color:#888; font-size:13px;">自动遍历网盘目录中的电影/剧集，抽取特征生成 .cas 指纹档案备份至本地/网盘，实现防和谐灾备与零占用点播。</p>
+            <div class="btn-row">
+                <button class="btn-primary" onclick="openMirrorModal()">新建指纹镜像任务</button>
+                <button class="btn-ghost" onclick="loadMirrorTasks()">刷新任务列表</button>
+            </div>
+            <table class="data-table" id="mirrorTable" style="margin-top:12px;">
+                <thead>
+                    <tr><th>任务 ID</th><th>网盘账号</th><th>扫描目录</th><th>输出目录</th><th>进度 (已处理/总数)</th><th>状态</th></tr>
+                </thead>
+                <tbody id="mirrorTbody">
+                    <tr><td colspan="6" style="text-align:center; color:#999;">暂无运行中的镜像任务</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 新建镜像任务 Modal -->
+    <div id="mirrorModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:100;">
+        <div class="modal-content" style="background:#fff; border-radius:12px; max-width:440px; margin:80px auto; padding:24px;">
+            <h3>新建 CAS 镜像任务</h3>
+            <div class="form-group">
+                <label>选择网盘账号</label>
+                <select id="mirrorAccount" style="width:100%; padding:8px;"></select>
+            </div>
+            <div class="form-group">
+                <label>扫描起始目录 ID / 路径</label>
+                <input type="text" id="mirrorScanPath" placeholder="root 或目录 ID">
+            </div>
+            <div class="form-group">
+                <label>输出目录 (默认 /cas)</label>
+                <input type="text" id="mirrorOutputDir" placeholder="/cas">
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="mirrorLocalMode" checked> 本地模式 (写入本地 data/cas/mirror，不占网盘空间)</label>
+            </div>
+            <div class="btn-row">
+                <button class="btn-primary" onclick="submitMirrorTask()">开始生成</button>
+                <button class="btn-ghost" onclick="closeMirrorModal()">取消</button>
+            </div>
         </div>
     </div>
 
@@ -178,6 +222,9 @@
 
             document.getElementById('rapidAccount').innerHTML =
                 accounts.map(a => `<option value="${a.id}">#${a.id} ${a.alias || a.username} (${a.driveType || 'cloud189'})</option>`).join('');
+
+            document.getElementById('mirrorAccount').innerHTML =
+                accounts.map(a => `<option value="${a.id}">#${a.id} ${a.alias || a.username} (${a.driveType || 'cloud189'})</option>`).join('');
         }
 
         async function checkHealth(id) {
@@ -240,8 +287,52 @@
             toast(d.message || (d.success ? '秒传成功' : `失败: ${d.error}`));
         }
 
+        // ============ CAS 指纹镜像 ============
+        function openMirrorModal() { document.getElementById('mirrorModal').style.display = 'block'; }
+        function closeMirrorModal() { document.getElementById('mirrorModal').style.display = 'none'; }
+
+        async function submitMirrorTask() {
+            const accountId = document.getElementById('mirrorAccount').value;
+            const scanPath = document.getElementById('mirrorScanPath').value.trim() || 'root';
+            const outputDir = document.getElementById('mirrorOutputDir').value.trim() || '/cas';
+            const localMode = document.getElementById('mirrorLocalMode').checked;
+
+            const res = await api(`/api/drives/account/${accountId}/cas-mirror`, {
+                method: 'POST',
+                body: JSON.stringify({ scanPath, outputDir, localMode })
+            });
+
+            if (res.success) {
+                closeMirrorModal();
+                toast('CAS 镜像任务已启动');
+                loadMirrorTasks();
+            } else {
+                toast(res.error || '启动失败');
+            }
+        }
+
+        async function loadMirrorTasks() {
+            const res = await api('/api/drives/cas-mirror/tasks');
+            const tasks = res.data || [];
+            const tbody = document.getElementById('mirrorTbody');
+            if (tasks.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999;">暂无镜像任务</td></tr>';
+                return;
+            }
+            tbody.innerHTML = tasks.map(t => `
+                <tr>
+                    <td>${t.taskId}</td>
+                    <td>${t.accountAlias} (${t.driveType})</td>
+                    <td>${t.scanPath}</td>
+                    <td>${t.outputDir}</td>
+                    <td>${t.processedFiles} / ${t.totalFiles} (成功: ${t.successFiles})</td>
+                    <td><span class="${t.status === 'done' ? 'status-ok' : t.status === 'failed' ? 'status-bad' : ''}">${t.status}</span></td>
+                </tr>
+            `).join('');
+        }
+
         // ============ 初始化 ============
-        (async () => { await loadDrivers(); await loadAccounts(); })();
+        (async () => { await loadDrivers(); await loadAccounts(); await loadMirrorTasks(); })();
     </script>
 </body>
 </html>

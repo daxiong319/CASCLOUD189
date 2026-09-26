@@ -131,27 +131,81 @@ export class CasFileService {
     }
 
     /**
-     * 解析 V2 清单文本。向后兼容：
+     * 解析 V2 清单文本。向后兼容与多源适配：
      *  - 纯 V2 JSON（含 version:2 与 hashes）
      *  - V1 JSON（fileName/fileSize/fileMd5/sliceMd5）自动升级
-     *  - Base64 编码的上述两种 JSON
+     *  - Base64 编码（支持 cloud189:// 协议头，自动补齐 Base64 padding）
+     *  - 管道符格式：文件名|文件大小|MD5|SliceMD5 (广泛流传于各大网盘论坛)
+     *  - 容错编码：多字符集尝试 (utf-8, gbk/gb18030)
      */
     public static parseManifestV2(text: string): CasManifestV2 {
-        const trimmed = (text || '').trim();
-        let jsonText = trimmed;
-        if (!trimmed.startsWith('{')) {
-            const decoded = Buffer.from(trimmed, 'base64').toString('utf-8');
-            if (!decoded.trim().startsWith('{')) {
-                throw new Error('无法识别的 CAS 文件内容格式');
+        const rawTrimmed = (text || '').trim();
+        if (!rawTrimmed) {
+            throw new Error('CAS 清单内容为空');
+        }
+
+        // 1. 尝试管道符格式 (name|size|md5|slice_md5)
+        if (rawTrimmed.includes('|')) {
+            const parts = rawTrimmed.split('|').map(p => p.trim());
+            if (parts.length >= 4) {
+                const [pName, pSize, pMd5, pSliceMd5] = parts;
+                const sizeNum = Number(pSize);
+                if (pName && Number.isFinite(sizeNum) && /^[A-Fa-f0-9]{32}$/.test(pMd5) && /^[A-Fa-f0-9]{32}$/.test(pSliceMd5)) {
+                    return {
+                        version: 2,
+                        fileName: pName,
+                        fileSize: sizeNum,
+                        hashes: {
+                            md5: pMd5.toUpperCase(),
+                            sliceMd5: pSliceMd5.toUpperCase()
+                        },
+                        sourceDrive: 'cloud189',
+                        createdAt: new Date().toISOString()
+                    };
+                }
             }
-            jsonText = decoded;
+        }
+
+        // 2. 去除协议头并处理 Base64
+        let cleanText = rawTrimmed;
+        if (cleanText.toLowerCase().startsWith('cloud189://')) {
+            cleanText = cleanText.substring('cloud189://'.length).trim();
+        }
+
+        let jsonText = cleanText;
+        if (!cleanText.startsWith('{') && !cleanText.startsWith('[')) {
+            try {
+                // 补齐 Base64 padding
+                const compact = cleanText.replace(/\s+/g, '');
+                const padLen = (4 - (compact.length % 4)) % 4;
+                const padded = compact + '='.repeat(padLen);
+                const buf = Buffer.from(padded, 'base64');
+                
+                // 尝试不同编码解析
+                let decoded = buf.toString('utf-8');
+                if (decoded.charCodeAt(0) === 0xFEFF) { // 去除 UTF-8 BOM
+                    decoded = decoded.slice(1);
+                }
+                if (decoded.trim().startsWith('{') || decoded.trim().startsWith('[')) {
+                    jsonText = decoded.trim();
+                } else if (decoded.includes('|')) {
+                    // Base64 解码后是管道符
+                    return this.parseManifestV2(decoded);
+                }
+            } catch (_) {}
         }
 
         let data: any;
         try {
             data = JSON.parse(jsonText);
         } catch (err: any) {
-            throw new Error(`解析 CAS JSON 失败: ${err.message}`);
+            throw new Error(`解析 CAS 失败: 既非有效 JSON 也非合法 Base64/管道符格式 (${err.message})`);
+        }
+
+        // 如果是数组，取第一条
+        if (Array.isArray(data)) {
+            if (data.length === 0) throw new Error('CAS JSON 数组为空');
+            data = data[0];
         }
 
         // 已经是 V2 结构

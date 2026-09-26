@@ -123,7 +123,8 @@ export class AliyunDriver extends BaseDriveDriver {
      *  - 若提供了 preHash（前 1KB SHA1），可先做 preHash 快速预检降低无效请求。
      */
     async rapidUpload(targetFolderId: string, meta: FileMetadata): Promise<RapidUploadResult> {
-        const sha1 = meta.hashes.sha1;
+        const hashes = meta?.hashes || {};
+        const sha1 = hashes.sha1;
         if (!sha1) {
             return {
                 success: false,

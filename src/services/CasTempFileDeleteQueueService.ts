@@ -9,6 +9,7 @@ export interface DeleteEntry {
     fileName?: string;
     familyId?: string;
     scheduledAt?: number;
+    driveType?: string;
 }
 
 /**
@@ -84,13 +85,29 @@ export class CasTempFileDeleteQueueService {
 
             for (const entry of readyEntries) {
                 try {
-                    const cloud189 = new Cloud189Service();
-                    await cloud189.init(entry.accountId);
+                    const driveType = entry.driveType || 'cloud189';
+                    if (driveType === 'cloud189') {
+                        const cloud189 = new Cloud189Service();
+                        await cloud189.init(entry.accountId);
 
-                    if (entry.familyId) {
-                        await cloud189.client?.deleteFamilyFile?.(entry.familyId, entry.fileId);
+                        if (entry.familyId) {
+                            await cloud189.client?.deleteFamilyFile?.(entry.familyId, entry.fileId);
+                        } else {
+                            await cloud189.client?.deleteFile?.(entry.fileId);
+                        }
                     } else {
-                        await cloud189.client?.deleteFile?.(entry.fileId);
+                        // 多网盘通用清理：从数据库加载账号调用对应驱动能力
+                        const { AppDataSource } = require('../database');
+                        const { Account } = require('../entities');
+                        const repo = AppDataSource.getRepository(Account);
+                        const account = await repo.findOne({ where: { id: entry.accountId } });
+                        if (account) {
+                            const { DriverRegistry } = require('../drivers/DriverRegistry');
+                            const driver = await DriverRegistry.getDriverForAccount(account);
+                            if (typeof driver.deleteFile === 'function') {
+                                await driver.deleteFile(entry.fileId);
+                            }
+                        }
                     }
                     this.logQueueEvent('SUCCESS', `成功清理临时文件: ${entry.fileName || entry.fileId}`);
                 } catch (err: any) {

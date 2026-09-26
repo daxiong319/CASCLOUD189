@@ -135,6 +135,34 @@ export function buildDriverRoutes(): Router {
         }
     });
 
+    // 启动 CAS 镜像生成任务（借鉴 cloud-auto-save-x）
+    router.post('/account/:accountId/cas-mirror', async (req: Request, res: Response) => {
+        try {
+            const { CasMirrorService } = require('../services/CasMirrorService');
+            const accountId = parseInt(req.params.accountId, 10);
+            const { scanPath, outputDir, localMode } = req.body;
+            const task = await CasMirrorService.startMirrorTask({
+                accountId,
+                scanPath,
+                outputDir,
+                localMode
+            });
+            res.json({ success: true, data: task });
+        } catch (err: any) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // 查询所有 CAS 镜像任务
+    router.get('/cas-mirror/tasks', async (req: Request, res: Response) => {
+        try {
+            const { CasMirrorService } = require('../services/CasMirrorService');
+            res.json({ success: true, data: CasMirrorService.listTasks() });
+        } catch (err: any) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
     // 保存分享链接（驱动支持时）
     router.post('/account/:accountId/save-share', async (req: Request, res: Response) => {
         try {

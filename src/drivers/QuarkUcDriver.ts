@@ -143,7 +143,8 @@ export class QuarkUcDriver extends BaseDriveDriver {
      * 2) 仅提供全量 md5 时无法构造夸克预校验，返回 not supported。
      */
     async rapidUpload(targetFolderId: string, meta: FileMetadata): Promise<RapidUploadResult> {
-        const preIds = meta.hashes.preHash || meta.hashes.sliceMd5;
+        const hashes = meta?.hashes || {};
+        const preIds = hashes.preHash || hashes.sliceMd5;
         if (!preIds || !String(preIds).includes(',')) {
             return {
                 success: false,
