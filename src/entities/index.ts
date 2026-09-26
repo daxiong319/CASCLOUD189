@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, PrimaryColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, PrimaryColumn, Index } from 'typeorm';
 
 const beijingDatetimeTransformer = {
     from: (date: Date) => date && new Date(date.getTime() + (8 * 60 * 60 * 1000)),
@@ -60,6 +60,18 @@ export class Account {
 
     @Column('text', { nullable: true, default: '' })
     familyRootFolderId!: string;
+
+    /** 多网盘支持：账号所属网盘驱动类型（默认 cloud189 保持向后兼容） */
+    @Column('text', { nullable: true, default: 'cloud189' })
+    driveType!: string;
+
+    /** 阿里云盘等使用 Token 认证的网盘：Access Token */
+    @Column('text', { nullable: true, default: '' })
+    accessToken!: string;
+
+    /** 阿里云盘 drive_id */
+    @Column('text', { nullable: true, default: '' })
+    driveId!: string;
 }
 
 @Entity()
@@ -226,6 +238,7 @@ export class CommonFolder {
 }
 
 @Entity()
+@Index('idx_proxyfile_task_md5', ['taskId', 'md5'])
 export class ProxyFile {
     @PrimaryGeneratedColumn()
     id!: number;
@@ -434,6 +447,7 @@ export class EmbyLibrary {
 }
 
 @Entity()
+@Index('idx_embyplayback_user_item', ['userId', 'itemId'])
 export class EmbyPlaybackState {
     @PrimaryGeneratedColumn()
     id!: number;

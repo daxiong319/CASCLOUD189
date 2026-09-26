@@ -15,6 +15,24 @@ export interface CasManifest {
     raw?: any;
 }
 
+/** CAS V2 多网盘多维特征清单 */
+export interface CasManifestV2 {
+    version: 2;
+    fileName: string;
+    fileSize: number;
+    hashes: {
+        md5?: string;
+        sliceMd5?: string;
+        sha1?: string;
+        preHash?: string;
+        gcid?: string;
+        sha115?: string;
+    };
+    /** 来源网盘（可选，便于溯源） */
+    sourceDrive?: string;
+    createdAt?: string;
+}
+
 export class CasFileService {
     private static DEFAULT_CAS_BASE_DIR_NAME = 'data/cas';
 
@@ -91,6 +109,93 @@ export class CasFileService {
             sliceMd5: manifest.sliceMd5,
             uploadTime: manifest.uploadTime || new Date().toISOString()
         }, null, 2);
+    }
+
+    // ==================== CAS V2（多网盘多维特征） ====================
+
+    /**
+     * V1 清单升级为 V2：补齐 version/hashes 结构，保留天翼双 MD5。
+     */
+    public static upgradeToV2(manifest: CasManifest): CasManifestV2 {
+        return {
+            version: 2,
+            fileName: manifest.fileName,
+            fileSize: manifest.fileSize,
+            hashes: {
+                md5: manifest.fileMd5,
+                sliceMd5: manifest.sliceMd5
+            },
+            sourceDrive: 'cloud189',
+            createdAt: manifest.uploadTime || new Date().toISOString()
+        };
+    }
+
+    /**
+     * 解析 V2 清单文本。向后兼容：
+     *  - 纯 V2 JSON（含 version:2 与 hashes）
+     *  - V1 JSON（fileName/fileSize/fileMd5/sliceMd5）自动升级
+     *  - Base64 编码的上述两种 JSON
+     */
+    public static parseManifestV2(text: string): CasManifestV2 {
+        const trimmed = (text || '').trim();
+        let jsonText = trimmed;
+        if (!trimmed.startsWith('{')) {
+            const decoded = Buffer.from(trimmed, 'base64').toString('utf-8');
+            if (!decoded.trim().startsWith('{')) {
+                throw new Error('无法识别的 CAS 文件内容格式');
+            }
+            jsonText = decoded;
+        }
+
+        let data: any;
+        try {
+            data = JSON.parse(jsonText);
+        } catch (err: any) {
+            throw new Error(`解析 CAS JSON 失败: ${err.message}`);
+        }
+
+        // 已经是 V2 结构
+        if (data?.version === 2 && data?.hashes) {
+            const fileName = data.fileName || data.name;
+            const fileSize = Number(data.fileSize ?? data.size);
+            if (!fileName || !Number.isFinite(fileSize)) {
+                throw new Error('CAS V2 清单缺少 fileName/fileSize');
+            }
+            return {
+                version: 2,
+                fileName: String(fileName),
+                fileSize,
+                hashes: {
+                    md5: (data.hashes.md5 || '').toUpperCase() || undefined,
+                    sliceMd5: (data.hashes.sliceMd5 || '').toUpperCase() || undefined,
+                    sha1: (data.hashes.sha1 || '').toUpperCase() || undefined,
+                    preHash: (data.hashes.preHash || '').toUpperCase() || undefined,
+                    gcid: data.hashes.gcid || undefined,
+                    sha115: (data.hashes.sha115 || data.hashes.sha1_115 || '').toUpperCase() || undefined
+                },
+                sourceDrive: data.sourceDrive,
+                createdAt: data.createdAt || new Date().toISOString()
+            };
+        }
+
+        // V1 结构自动升级
+        return this.upgradeToV2(this.parseManifest(data));
+    }
+
+    /** V2 清单序列化 */
+    public static encodeManifestV2JsonText(manifest: CasManifestV2): string {
+        return JSON.stringify(manifest, null, 2);
+    }
+
+    /**
+     * V2 清单转换为统一驱动 FileMetadata（供任意网盘驱动秒传使用）。
+     */
+    public static toFileMetadata(manifest: CasManifestV2): import('../drivers/types').FileMetadata {
+        return {
+            fileName: manifest.fileName,
+            fileSize: manifest.fileSize,
+            hashes: manifest.hashes
+        };
     }
 
     public static async getLocalManifestPath(taskId: number, fileName: string): Promise<string> {

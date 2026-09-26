@@ -6,9 +6,20 @@ const { ResourceSearchService } = require('./services/resourceSearchService');
 const { AccountHealthCheckService } = require('./services/AccountHealthCheckService');
 const { TaskGroupService } = require('./services/taskGroup');
 const { mountCasby } = require('./casby');
+const { CasTempFileDeleteQueueService } = require('./services/CasTempFileDeleteQueueService');
+const { DriverRegistry } = require('./drivers/DriverRegistry');
+const { BaseDriveDriver } = require('./drivers/BaseDriveDriver');
+const { buildDriverRoutes } = require('./routes/driverRoutes');
 
 function setupProExtensions(app, AppDataSource, Cloud189Service) {
     const { Account } = require('./entities');
+
+    // 0. 多网盘驱动体系：恢复持久化清理队列 + 注册统一驱动 API
+    CasTempFileDeleteQueueService.restoreFromDisk();
+    app.use('/api/drives', buildDriverRoutes());
+    // 周期清理过期直链缓存（每 10 分钟）
+    setInterval(() => BaseDriveDriver.purgeExpiredUrlCache(), 10 * 60 * 1000);
+    console.log(`[Drivers] 多网盘驱动体系就绪: ${DriverRegistry.listDrivers().map(d => d.displayName).join('、')}`);
 
     // 1. 挂载 Casby 虚拟 Emby 服务
     mountCasby(app);
